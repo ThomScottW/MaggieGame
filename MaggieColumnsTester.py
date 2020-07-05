@@ -14,25 +14,40 @@ def test_game() -> None:
     """Run the game of MaggieColumns."""
     game_board, faller = _start_game()
     running = True
+    faller_active = True # True when there is currently a faller being controlled by the player.
+    finding_matches = False # True when we are handling the match process. Matching and falling.
+    # To have a matching animation appear on seperate frames, these bool values control which path the loop takes.
     while running:
-        _print_faller_stats(faller)
-        _print_board(game_board)
+        if DEBUGGING and faller_active: _print_faller_stats(faller)
+        _print_board(game_board.board())
         move = input('What to do?: ')
-        if move == '':
-            if faller.landed:
-                faller.fall()
-                del faller
-                faller = _make_new_faller(game_board)
-            else:
-                faller.fall()
-        elif move == 'R':
-            faller.rotate()
-        elif move == '<':
-            faller.move(faller.column_num - 1)
-        elif move == '>':
-            faller.move(faller.column_num + 1)
-        elif move == 'Q':
-            running = False
+        if faller_active:
+            if move == '':
+                if faller.landed:
+                    faller.fall()
+                    del faller
+                    faller_active = False
+                    finding_matches = True # After the faller lands, check for matches on the board.
+                else:
+                    faller.fall()
+            elif move == 'R':
+                faller.rotate()
+            elif move == '<':
+                faller.move(faller.column_num - 1)
+            elif move == '>':
+                faller.move(faller.column_num + 1)
+            elif move == 'Q':
+                running = False
+        else: # Faller is not active.
+            if finding_matches:
+                game_board.find_matches()
+                finding_matches = False # Done finding matches.
+            else: # Matches have been found already. 
+                if game_board.handle_match_process(): # Delete the matched pieces.
+                    finding_matches = True # If matches were deleted, then we need to re-check for any new matches. (Pieces fall)
+                else:
+                    faller = _make_new_faller(game_board.board()) # Make a new faller. All in the same frame.
+                    faller_active = True
     print('Game Ended, Bye')
 
 
@@ -42,17 +57,13 @@ def test_game() -> None:
 def _start_game() -> (MaggieColumnsModel.Board, MaggieColumnsModel.Faller):
     """Create a new game board and put a faller in it."""
     board_object = MaggieColumnsModel.Board()
-    new_game_board = board_object.board()
-    new_faller = MaggieColumnsModel.Faller(new_game_board, randint(0, 5))
-    return new_game_board, new_faller
+    new_faller = MaggieColumnsModel.Faller(board_object.board(), randint(0, 5))
+    return board_object, new_faller
 
 
 def _make_new_faller(board:[[int]]) -> MaggieColumnsModel.Faller:
     new_faller = MaggieColumnsModel.Faller(board, randint(0, 5))
     return new_faller
-
-
-
 
 
 def _print_board(gameboard: [list]) -> None:
@@ -63,7 +74,7 @@ def _print_board(gameboard: [list]) -> None:
         print('|', end='')
         for col in gameboard:
             if type(col[row]) == MaggieColumnsModel.Piece:
-                print(col[row].sticker(), end='')
+                print(col[row], end='')
             elif col[row] == 0:
                 print('   ', end='')
         print('|')
@@ -78,7 +89,7 @@ def _print_top_rows(gameboard: [list]) -> None:
         print('|', end='')
         for col in gameboard:
             if type(col[row]) == MaggieColumnsModel.Piece:
-                print(col[row].sticker(), end='')
+                print(col[row], end='')
             elif col[row] == 0:
                 print('   ', end='')
         print('|')
