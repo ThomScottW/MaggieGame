@@ -12,18 +12,19 @@ Features that work so far:
  - Falling after matching
 """
 
-from random import randint
+import random
 
 NUMBER_OF_ROWS = 13
 NUMBER_OF_COLUMNS = 6
 MAGGIE_JEWELS = {
     1: 'H', # Happy Maggie. Smiling Sticker.
     2: 'S', # Sad Maggie. Pouting Sticker
-    3: 'K', # Kissing Maggie. Kissing face sticker.
-    4: 'R', # Rude Magggie. Big Mouth filter with 'rude' written. 
+    3: 'M', # Moustache Maggie.
+    4: 'R', # Rude Maggie. Big Mouth filter with 'rude' written. 
     5: 'G', # Glowing Maggie. Bear Filter with sparkles.
     6: 'L', # Licking Maggie. Tongue sticking out filter.
-    7: 'B'  # Blown up Maggie. 
+    7: 'B', # Blown up Maggie. 
+    8: 'O'  # Golden Special Donut.
 }
 
 class GameOverError(Exception):
@@ -82,17 +83,23 @@ class Piece:
         self._matched = True
         self._sticker = f'*{self._sticker[1:-1]}*'
 
-    def _pick_sticker(self):
-        """Randomly select an integer to use as a key to the MAGGIE_JEWELS dictionary to pick a sticker for the piece."""
-        random_number = randint(1, 7)
-        self._sticker = f'[{MAGGIE_JEWELS[random_number]}]'
+    def _pick_sticker(self) -> None:
+        """Randomly select an integer to use as a key to the MAGGIE_JEWELS dictionary to pick a sticker for the piece.
+        Each of the standard pieces has an equal chance of being picked. The special donut has a 5% chance to appear.
+        The special donut matches with all pieces.
+        """
+        if random.random() <= 0.05: # 5% chance of getting a special donut.
+            self._sticker = f'[{MAGGIE_JEWELS[8]}]'
+        else: # The other 95% is evenly split between the 7 standard pieces.
+            random_number = random.randint(1, 7)
+            self._sticker = f'[{MAGGIE_JEWELS[random_number]}]'
         
 
 class Faller:
     """This is the part of the MaggieColumns game that the player has control over.
     
     Upon initialization, the faller needs the game board, and the number of the index of the current column.
-    Additionally, the _faller attribute of this object is composed of three Jewel object, in the form of a list. Ex: [Jewel1, Jewel2, Jewel3]
+    Additionally, the _faller attribute of this object is composed of three Piece objects, in the form of a list. Ex: [Jewel1, Jewel2, Jewel3]
     The faller can be acted upon while it is in the falling or landed state. It should be deleted when frozen.
     If the faller freezes before it is fully on the board, then the game ends.
     """
@@ -102,8 +109,8 @@ class Faller:
         # Designate a top, bottom, and middle piece. For the purpose of rotating them.
         self._split_into_parts()
         # Designate the column that the faller currently resides in.
-        self.column_num = column_num
-        self._current_column = game_board[column_num]
+        self.column_num = self._check_initial_column(game_board, column_num)
+        self._current_column = game_board[self.column_num]
         self._game_board = game_board
         # Insert the faller into the column.
         self._insert_faller()
@@ -185,6 +192,16 @@ class Faller:
             return
 
     # Methods used by the faller to be aware of its surroundings.
+    def _check_initial_column(self, board: [[int]], column_num: int) -> int:
+        """Make sure the space this faller is spawned into is not occupied by another faller.
+        
+        If it is, change the column number to be something else before the faller is created.
+        Return a valid column number.
+        """
+        if board[column_num][0:3] != [0, 0, 0]: # If the first 3 cells (the hidden ones) in the column are not empty.
+            column_num = (column_num + 1) % 6 # Keeps column_num between 0 and 5
+        return column_num
+    
     def _faller_is_landing(self) -> bool:
         bottom_index = self._find_bottom_index()
         if bottom_index == 14:
@@ -202,9 +219,9 @@ class Faller:
         else:
             return False
     
-    def _check_new_column(self, column: list) -> bool:
+    def _check_new_column(self, new_column: list) -> bool:
         """Return true if there is space in a new column."""
-        if column[self._find_bottom_index()] == 0:
+        if new_column[self._find_bottom_index()] == 0:
             return True
         else:
             return False
@@ -263,6 +280,9 @@ class Faller:
     def _insert_faller(self) -> None:
         """Insert the faller into the first 3 parts of the column."""
         self._current_column[0:3] = self._faller
+        print('-' * 70)
+        print(f'DEBUG: This is current column\n{self._current_column}\nFor Faller {[hex(id(s)) for s in self._faller]}')
+        print('-' * 70)
 
     def _assign_pieces(self) -> list:
         """Create 3 pieces and append them to a list and return that list."""
@@ -313,19 +333,19 @@ class Board:
     def _search_all_directions(self) -> None:
         """Search up, down, left, right, and diagonally for matches."""
         for col in range(NUMBER_OF_COLUMNS):
-            for row in range(NUMBER_OF_ROWS + 3):
+            for row in range(3, NUMBER_OF_ROWS + 3):
                 cell = self._board[col][row]
                 if (cell, col, row) in self._matched_pieces: 
                     continue # If a piece was already found to be matched, then we don't need to search for it again. Skip.
                 if cell != 0:
-                    self._search_direction_for_matches(col, row, 0, 1)   # Up
-                    self._search_direction_for_matches(col, row, 0, -1)  # Down
+                    self._search_direction_for_matches(col, row, 0, -1)  # Up
+                    self._search_direction_for_matches(col, row, 0, 1)   # Down
                     self._search_direction_for_matches(col, row, -1, 0)  # Left
                     self._search_direction_for_matches(col, row, 1, 0)   # Right
-                    self._search_direction_for_matches(col, row, -1, 1)  # Diagonal Up Left
-                    self._search_direction_for_matches(col, row, 1, 1)   # Diagonal Up Right  
-                    self._search_direction_for_matches(col, row, -1, -1) # Diagonal Down Left
-                    self._search_direction_for_matches(col, row, 1, -1)  # Diagonal Down Right     
+                    self._search_direction_for_matches(col, row, -1, -1) # Diagonal Up Left
+                    self._search_direction_for_matches(col, row, 1, -1)  # Diagonal Up Right  
+                    self._search_direction_for_matches(col, row, -1, 1)  # Diagonal Down Left
+                    self._search_direction_for_matches(col, row, 1, 1)   # Diagonal Down Right     
 
     def _search_direction_for_matches(self, col: int, row: int, col_delta: int, row_delta:int) -> None:
         """Using a starting location for a piece, given in coordinates (col, row), find all matches in a single direction.
@@ -333,22 +353,37 @@ class Board:
         col_delta and row_delta should be -1, 0, or 1 to indicate left, no, or rightward motion.
         
         col_delta = 1 indicates rightward searching. -1 means leftward.
-        row_delta = 1 indicates upward searching. -1 means downward.
+        row_delta = -1 indicates upward searching.    1 means downward.
         A combination of both can be used to search for matches diagonally.
         """
-        search_location = self._board[col][row] # Starting point for the search. We will look in one directin starting from here.
-        found_pieces = [(search_location, col, row)] # Pieces found that have the same sticker. Col/row included to find for deletion.
+        search_location = self._board[col][row] # Starting point for the search. We will look in one directin starting from here. This is a Piece object.
+        # These two lists keep track of the pieces that this function searches through. One or the other will be blank, depending on if the first piece is a donut or not.
+        found_pieces =       [(search_location, col, row)] if search_location.sticker() != ' O ' else [] # Pieces found that have the same sticker. Col/row included to find for deletion.
+        donuts_encountered = [(search_location, col, row)] if search_location.sticker() == ' O ' else [] # To keep track of donuts that are encountered.
         while True:
-            col += col_delta # Shift the search to
-            row += row_delta # the next column and row.
+            # Shift the search to the next column and row.
+            col += col_delta
+            row += row_delta 
+
             # Test to make sure the column and row indexes are within the bounds of the board. Subtract 1 because indexing starts at 0. 
             if not (0 <= col <= NUMBER_OF_COLUMNS - 1) or not (0 <= row <= (NUMBER_OF_ROWS + 3) - 1): # NUMBER_OF_ROWS + 3 to account for top 3 rows.
                 break
-            search_location = self._board[col][row]
-            if search_location == 0 or search_location.sticker() != found_pieces[-1][0].sticker(): # If we reach an empty cell or
-                break                                                                              # this piece does not match the last, stop search.
+
+            search_location = self._board[col][row] # Index board to acquire new search location. This will either be a Piece object or an integer 0.
+            
+            if search_location == 0: # Stop searching if a blank cell is encountered.
+                break
+            elif search_location.sticker() == ' O ': # If the search location is a donut, add it to the list of dounts.
+                donuts_encountered.append((search_location, col, row))
+            elif found_pieces and search_location.sticker() == found_pieces[-1][0].sticker(): # If there was a previous piece it matches the current piece, add the current piece.
+                found_pieces.append((search_location, col, row))
+            elif not found_pieces: # Otherwise, add the current piece. This branch happens if the first piece was a golden donut and found_pieces is therefore empty.
+                found_pieces.append((search_location, col, row))
             else:
-                found_pieces.append((search_location, col, row)) # Otherwise, we found a matching piece. Keep track of its col and row.
+                break
+                
+        found_pieces += donuts_encountered # Combine the donuts with the standard pieces.
+
         # After searching in that direction, if 3 or more pieces were found, then we match them.
         if len(found_pieces) >= 3:
             for piece, col, row in found_pieces:
@@ -374,7 +409,7 @@ class Board:
         """Return a list of triples representing every floating piece in the board."""
         floating_pieces = []
         for col in range(NUMBER_OF_COLUMNS):
-            for row in range(NUMBER_OF_ROWS + 3):
+            for row in range(3, NUMBER_OF_ROWS + 3): # exclude the top 3 hidden rows
                 cell = self._board[col][row]
                 if cell != 0 and self._space_below(cell, col, row): # If the cell is not empty and there is space underneath.
                     floating_pieces.append((cell, col, row))
