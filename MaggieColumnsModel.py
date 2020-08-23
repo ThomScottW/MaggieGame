@@ -1,16 +1,6 @@
 # MaggieColumns Model
 
 # This module implements the rules of the game of columns.
-"""
-Features that work so far:
- - Falling
- - Random Column Picking
- - Random Piece Generation
- - Rotation
- - Moving
- - Matching
- - Falling after matching
-"""
 
 import random
 
@@ -53,9 +43,29 @@ class Piece:
     
     def __str__(self):
         return self._sticker
+    
+    def id(self) -> str:
+        """Return the identifying icon of this piece, without anything denoting its current state."""
+        return self._sticker[1]
 
-    def sticker(self):
+    def sticker(self) -> str:
+        """Return the icon and whatever surrounds it that denotes its current state."""
         return self._sticker
+    
+    def is_donut(self) -> bool:
+        return True if self.sticker()[1] == 'O' else False
+    
+    def is_falling(self) -> bool:
+        """Return True if the piece is falling."""
+        return True if self._falling else False
+
+    def is_landed(self) -> bool:
+        """Return True if the piece is landed."""
+        return True if self._landed else False
+    
+    def is_matched(self) -> bool:
+        """Return True if the piece is matched."""
+        return True if self._matched else False
     
     # Methods for changing the state of the piece.
     # [1:-1] slicing is to access the 'middle' of the piece, which is the letter that designates its color.
@@ -98,17 +108,20 @@ class Piece:
 class Faller:
     """This is the part of the MaggieColumns game that the player has control over.
     
-    Upon initialization, the faller needs the game board, and the number of the index of the current column.
-    Additionally, the _faller attribute of this object is composed of three Piece objects, in the form of a list. Ex: [Jewel1, Jewel2, Jewel3]
-    The faller can be acted upon while it is in the falling or landed state. It should be deleted when frozen.
-    If the faller freezes before it is fully on the board, then the game ends.
+    Upon initialization, the faller chooses its component pieces, and assigns a top, middle, and bottom piece. 
+    After being initialized, it needs to be inserted with the insert() method, which takes a game board and a column number.
     """
 
-    def __init__(self, game_board:[[int]], column_num:int):
+    def __init__(self):
         self._faller = self._assign_pieces()
         # Designate a top, bottom, and middle piece. For the purpose of rotating them.
         self._split_into_parts()
         # Designate the column that the faller currently resides in.
+    
+    def __getitem__(self, index):
+        return self._faller[index]
+    
+    def insert(self, game_board: [[int]], column_num: int):
         self.column_num = self._check_initial_column(game_board, column_num)
         self._current_column = game_board[self.column_num]
         self._game_board = game_board
@@ -280,9 +293,6 @@ class Faller:
     def _insert_faller(self) -> None:
         """Insert the faller into the first 3 parts of the column."""
         self._current_column[0:3] = self._faller
-        print('-' * 70)
-        print(f'DEBUG: This is current column\n{self._current_column}\nFor Faller {[hex(id(s)) for s in self._faller]}')
-        print('-' * 70)
 
     def _assign_pieces(self) -> list:
         """Create 3 pieces and append them to a list and return that list."""
@@ -296,7 +306,6 @@ class Faller:
         self._top_piece = self._faller[0]
         self._middle_piece = self._faller[1]
         self._bottom_piece = self._faller[2]
-
 
 
 class Board:
@@ -314,6 +323,10 @@ class Board:
     def __init__(self):
         self._board = self._generate_new_board()
         self._matched_pieces = []
+        self._score = 0
+    
+    def score(self):
+        return self._score
 
     def board(self) -> [[int]]:
         """Return the 2D list that this object represents."""
@@ -323,20 +336,33 @@ class Board:
         """Detect pieces that are matched on the board. Then make any 'floating' pieces fall to fill in the gaps."""
         # Search the board in all directions.
         self._search_all_directions()
+        return True if self._matched_pieces else False
     
-    def handle_match_process(self) -> bool:
-        """Delete matched pieces on the board, and make any floating pieces fall downward. Return true if matches were deleted."""
-        if self._delete_matched_pieces(): # If pieces were deleted, then we need to check for any floating pieces.
-            self._apply_gravity()
+    def delete_matched_pieces(self) -> bool:
+        """Delete all pieces that are currently in the matched state. Return true if pieces were deleted."""
+        if self._matched_pieces: # Only attempt to delete matches if matches exist.
+            for matched_piece, col, row in self._matched_pieces:
+                self._board[col][row] = 0 # Set to 0 to indicate erasure of the matched piece.
+                self._score += 10 if not matched_piece.is_donut() else 100
+            self._matched_pieces = []
             return True
+        else:
+            return False
+    
+    def apply_gravity(self) -> None:
+        """Make any floating pieces fall."""
+        floating_pieces = self._search_for_floaters()
+        while floating_pieces: # Repeatedly search for new falling pieces, and make those pieces fall.
+            self._make_pieces_fall(floating_pieces)
+            floating_pieces = self._search_for_floaters()
     
     def _search_all_directions(self) -> None:
         """Search up, down, left, right, and diagonally for matches."""
         for col in range(NUMBER_OF_COLUMNS):
             for row in range(3, NUMBER_OF_ROWS + 3):
                 cell = self._board[col][row]
-                if (cell, col, row) in self._matched_pieces: 
-                    continue # If a piece was already found to be matched, then we don't need to search for it again. Skip.
+                # if (cell, col, row) in self._matched_pieces: 
+                #     continue # If a piece was already found to be matched, then we don't need to search for it again. Skip.
                 if cell != 0:
                     self._search_direction_for_matches(col, row, 0, -1)  # Up
                     self._search_direction_for_matches(col, row, 0, 1)   # Down
@@ -373,9 +399,9 @@ class Board:
             
             if search_location == 0: # Stop searching if a blank cell is encountered.
                 break
-            elif search_location.sticker() == ' O ': # If the search location is a donut, add it to the list of dounts.
+            elif search_location.is_donut(): # If the search location is a donut, add it to the list of dounts.
                 donuts_encountered.append((search_location, col, row))
-            elif found_pieces and search_location.sticker() == found_pieces[-1][0].sticker(): # If there was a previous piece it matches the current piece, add the current piece.
+            elif found_pieces and search_location.id() == found_pieces[-1][0].id(): # If there was a previous piece it matches the current piece, add the current piece.
                 found_pieces.append((search_location, col, row))
             elif not found_pieces: # Otherwise, add the current piece. This branch happens if the first piece was a golden donut and found_pieces is therefore empty.
                 found_pieces.append((search_location, col, row))
@@ -390,20 +416,6 @@ class Board:
                 piece.match()
                 self._matched_pieces.append((piece, col, row)) # Add the piece and its col/row to the list of matched pieces.
 
-    def _delete_matched_pieces(self) -> bool:
-        """Delete all pieces that are currently in the matched state. Return true if pieces were deleted."""
-        if self._matched_pieces: # Only attempt to delete matches if matches exist.
-            for matched_piece, col, row in self._matched_pieces:
-                self._board[col][row] = 0 # Set to 0 to indicate erasure of the matched piece.
-            self._matched_pieces = []
-            return True
-    
-    def _apply_gravity(self) -> None:
-        """Make any floating pieces fall."""
-        floating_pieces = self._search_for_floaters()
-        while floating_pieces: # Repeatedly search for new falling pieces, and make those pieces fall.
-            self._make_pieces_fall(floating_pieces)
-            floating_pieces = self._search_for_floaters()
     
     def _search_for_floaters(self) -> [(Piece, int, int)]:
         """Return a list of triples representing every floating piece in the board."""
@@ -422,7 +434,7 @@ class Board:
             self._board[col][row + 1] = piece
 
     def _space_below(self, cell, col, row) -> bool:
-        """Return True if the cell beneath the piece is empty."""
+        """Return True if the cell beneath a piece is empty."""
         try:
             if self._board[col][row + 1] == 0:
                 return True
