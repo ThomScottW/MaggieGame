@@ -11,6 +11,7 @@ Make sure python 3.8.2 or later is installed on your system.
 2. Extract the MaggieColumns-Master folder.
 3. Navigate into the MaggieColumns-Master folder, or open it in an IDE. (I used VS Code).
 4. Create a new folder within the MaggieColumns-Master folder for the virtual environment. (I named it "venv".)
+![Commands](commands.png)
 5. Create a virtual environment using "python -m venv ."
 6. Navigate into the Scripts directory of the venv. (Should be venv/scripts). (Use "cd Scripts" command).
 7. Activate by typing "activate".
